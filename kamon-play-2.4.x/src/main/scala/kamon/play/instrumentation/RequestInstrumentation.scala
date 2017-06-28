@@ -15,10 +15,15 @@
 
 package kamon.play.instrumentation
 
+import java.util
+import java.util.Collections
+
+import io.netty.handler.codec.http.HttpRequest
+import io.opentracing.propagation.TextMap
 import kamon.Kamon.tracer
-import kamon.play.{ KamonFilter, PlayExtension }
+import kamon.play.{KamonFilter, PlayExtension}
 import kamon.trace._
-import kamon.util.SameThreadExecutionContext
+import kamon.util.{CallingThreadExecutionContext, HasContinuation}
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation._
 import play.api.mvc.Results._
@@ -30,7 +35,7 @@ class RequestInstrumentation {
   private lazy val filter: EssentialFilter = new KamonFilter()
 
   @DeclareMixin("play.api.mvc.RequestHeader+")
-  def mixinContextAwareToRequestHeader: TraceContextAware = TraceContextAware.default
+  def mixinHasContinuationToRequestHeader: HasContinuation = HasContinuation.fromTracerActiveSpan()
 
   @Before("call(* play.api.http.DefaultHttpRequestHandler.routeRequest(..)) && args(requestHeader)")
   def routeRequest(requestHeader: RequestHeader): Unit = {
@@ -41,20 +46,19 @@ class RequestInstrumentation {
     Tracer.setCurrentContext(tracer.newContext("UnnamedTrace", token))
   }
 
-  @Around("call(* play.api.http.HttpFilters.filters(..))")
-  def filters(pjp: ProceedingJoinPoint): Any = filter +: pjp.proceed().asInstanceOf[Seq[EssentialFilter]]
 
-  @Before("call(* play.api.http.HttpErrorHandler.onClientServerError(..)) && args(requestContextAware, statusCode, *)")
-  def onClientError(requestContextAware: TraceContextAware, statusCode: Int): Unit = {
-    requestContextAware.traceContext.collect { ctx ⇒
-      PlayExtension.httpServerMetrics.recordResponse(ctx.name, statusCode.toString)
-    }
+  def readOnlyTextMapFromHttpRequest(request: RequestHeader): TextMap = new TextMap {
+    override def put(key: String, value: String): Unit = {}
+    override def iterator(): util.Iterator[util.Map.Entry[String, String]] = Collections.emptyIterator()
+//      val a = request.headers.toSimpleMap.
   }
 
-  @Before("call(* play.api.http.HttpErrorHandler.onServerError(..)) && args(requestContextAware, ex)")
-  def onServerError(requestContextAware: TraceContextAware, ex: Throwable): Unit = {
-    requestContextAware.traceContext.collect { ctx ⇒
-      PlayExtension.httpServerMetrics.recordResponse(ctx.name, InternalServerError.header.status.toString)
-    }
+  def isError(statusCode: Int): Boolean =
+    statusCode >= 500 && statusCode < 600
+
+
+  @Around("call(* play.api.http.HttpFilters.filters(..))")
+  def filters(pjp: ProceedingJoinPoint): Any = {
+    filter +: pjp.proceed().asInstanceOf[Seq[EssentialFilter]]
   }
 }

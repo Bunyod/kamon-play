@@ -16,9 +16,11 @@
 package kamon.play.di
 
 import javax.inject._
+
 import kamon.Kamon
-import play.api.inject.{ ApplicationLifecycle, Module }
-import play.api.{ Configuration, Environment, Logger }
+import play.api.inject.{ApplicationLifecycle, Module}
+import play.api.{Configuration, Environment, Logger}
+
 import scala.concurrent.Future
 
 class GuiceModule extends Module {

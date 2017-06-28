@@ -49,6 +49,7 @@ trait NameGenerator {
   def generateHttpClientOperationName(request: WSRequest): String
 }
 
+
 class DefaultNameGenerator extends NameGenerator {
   import _root_.scala.collection.concurrent.TrieMap
   import _root_.play.api.routing.Router
@@ -57,21 +58,20 @@ class DefaultNameGenerator extends NameGenerator {
   private val cache = TrieMap.empty[String, String]
   private val normalizePattern = """\$([^<]+)<[^>]+>""".r
 
-  def generateOperationName(requestHeader: RequestHeader): String = requestHeader.tags.get(Router.Tags.RouteVerb).map { verb ⇒
-    val path = requestHeader.tags(Router.Tags.RoutePattern)
-    cache.atomicGetOrElseUpdate(s"$verb$path", {
-      val operationName = {
+  def generateOperationName(requestHeader: RequestHeader): String = requestHeader.attrs.get(Router.Attrs.HandlerDef).map { handlerDef ⇒
+    cache.getOrElseUpdate(s"${handlerDef.verb}${handlerDef.path}", {
+      val traceName = {
         // Convert paths of form GET /foo/bar/$paramname<regexp>/blah to foo.bar.paramname.blah.get
-        val p = normalizePattern.replaceAllIn(path, "$1").replace('/', '.').dropWhile(_ == '.')
+        val p = normalizePattern.replaceAllIn(handlerDef.path, "$1").replace('/', '.').dropWhile(_ == '.')
         val normalisedPath = {
           if (p.lastOption.exists(_ != '.')) s"$p."
           else p
         }
-        s"$normalisedPath${verb.toLowerCase(Locale.ENGLISH)}"
+        s"$normalisedPath${handlerDef.verb.toLowerCase(Locale.ENGLISH)}"
       }
-      operationName
+      traceName
     })
-  } getOrElse "UntaggedOperation"
+  } getOrElse "UntaggedTrace"
 
   def generateHttpClientOperationName(request: WSRequest): String = request.uri.getAuthority
 }

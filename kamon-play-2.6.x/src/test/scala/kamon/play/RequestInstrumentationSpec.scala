@@ -1,5 +1,5 @@
 /* =========================================================================================
- * Copyright © 2013-2016 the kamon project <http://kamon.io/>
+ * Copyright © 2013-2017 the kamon project <http://kamon.io/>
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
  * except in compliance with the License. You may obtain a copy of the License at
@@ -20,23 +20,32 @@ import javax.inject.Inject
 import kamon.play.action.OperationName
 import org.scalatest.Inside
 import org.scalatestplus.play._
+import org.scalatestplus.play.guice.GuiceOneServerPerSuite
+import play.api.Application
 import play.api.http.HttpErrorHandler
-import play.api.mvc.Results.Ok
-import play.api.mvc._
-import play.api.routing.SimpleRouter
+import play.api.inject.guice.GuiceApplicationBuilder
+import play.api.libs.ws.WSRequest
+import play.api.mvc.Results.{InternalServerError, Ok}
+import play.api.mvc.{Action, Handler, _}
+import play.api.routing.{HandlerDef, SimpleRouter}
 import play.api.test.Helpers._
 import play.api.test._
 import play.core.routing._
 
-import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
 
-class RequestHandlerInstrumentationSpec extends PlaySpec with OneServerPerSuite with Inside {
-  System.setProperty("config.file", "./kamon-play-2.5.x/src/test/resources/conf/application.conf")
+class RequestInstrumentationSpec extends PlaySpec with GuiceOneServerPerSuite with Inside {
+  System.setProperty("config.file", "./kamon-play-2.6.x/src/test/resources/conf/application.conf")
 
   override lazy val port: Port = 19002
   val executor = scala.concurrent.ExecutionContext.Implicits.global
 
-  implicit override lazy val app = FakeApplication(withRoutes = {
+  val kamonFilter = new GuiceApplicationBuilder()
+    .injector()
+    .instanceOf[KamonFilter]
+
+  val withRoutes: PartialFunction[(String, String), Handler] = {
     case ("GET", "/async") ⇒
       Action.async {
         Future {
@@ -49,8 +58,7 @@ class RequestHandlerInstrumentationSpec extends PlaySpec with OneServerPerSuite 
       }
     case ("GET", "/error") ⇒
       Action {
-        throw new Exception("This page generates an error!")
-        Ok("This page will generate an error!")
+        InternalServerError("This page will generate an error!")
       }
     case ("GET", "/redirect") ⇒
       Action {
@@ -67,20 +75,25 @@ class RequestHandlerInstrumentationSpec extends PlaySpec with OneServerPerSuite 
             Ok("Async.async")
           }(executor)
         }
-      }
+      }(executor)
     case ("GET", "/retrieve") ⇒
       Action {
         Ok("retrieve from TraceLocal")
       }
-  },
+  }
 
+//    ("play.http.requestHandler", "play.api.http.DefaultHttpRequestHandler"),
 //    ("play.http.filters", "kamon.play.TestHttpFilters"),
-    additionalConfiguration = Map(
+  val additionalConfiguration: Map[String, _] = Map(
     ("application.router", "kamon.play.Routes"),
-    ("play.http.requestHandler", "play.api.http.DefaultHttpRequestHandler"),
     ("logger.root", "OFF"),
     ("logger.play", "OFF"),
-    ("logger.application", "OFF")))
+    ("logger.application", "OFF"))
+
+  implicit override lazy val app: Application = new GuiceApplicationBuilder()
+    .configure(additionalConfiguration)
+    .routes(withRoutes)
+    .build
 
   val traceTokenValue = "kamon-trace-token-test"
   val traceTokenHeaderName = "X-Trace-Token"
@@ -92,41 +105,41 @@ class RequestHandlerInstrumentationSpec extends PlaySpec with OneServerPerSuite 
 
   "the Request instrumentation" should {
     "respond to the Async Action with X-Trace-Token" in {
-      val Some(result) = route(FakeRequest(GET, "/async").withHeaders(traceTokenHeader, traceLocalStorageHeader))
+      val Some(result) = route(app, FakeRequest(GET, "/async").withHeaders(traceTokenHeader, traceLocalStorageHeader))
       header(traceTokenHeaderName, result) must be(expectedToken)
     }
 
     "respond to the NotFound Action with X-Trace-Token" in {
-      val Some(result) = route(FakeRequest(GET, "/notFound").withHeaders(traceTokenHeader))
+      val Some(result) = route(app, FakeRequest(GET, "/notFound").withHeaders(traceTokenHeader))
       header(traceTokenHeaderName, result) must be(expectedToken)
     }
 
     "respond to the Default Action with X-Trace-Token" in {
-      val Some(result) = route(FakeRequest(GET, "/default").withHeaders(traceTokenHeader))
+      val Some(result) = route(app, FakeRequest(GET, "/default").withHeaders(traceTokenHeader))
       header(traceTokenHeaderName, result) must be(expectedToken)
     }
 
     "respond to the Redirect Action with X-Trace-Token" in {
-      val Some(result) = route(FakeRequest(GET, "/redirect").withHeaders(traceTokenHeader))
+      val Some(result) = route(app, FakeRequest(GET, "/redirect").withHeaders(traceTokenHeader))
       header("Location", result) must be(Some("/redirected"))
       header(traceTokenHeaderName, result) must be(expectedToken)
+    }
+
+    "respond to the Async Action with X-Trace-Token and the renamed trace" in {
+      val result = Await.result(route(app, FakeRequest(GET, "/async-renamed").withHeaders(traceTokenHeader)).get, 10 seconds)
+      //      Tracer.currentContext.name must be("renamed-trace")
+      Some(result.header.headers(traceTokenHeaderName)) must be(expectedToken)
     }
   }
 }
 
-//    "respond to the Async Action with X-Trace-Token and the renamed trace" in {
-//      val result = Await.result(route(FakeRequest(GET, "/async-renamed").withHeaders(traceTokenHeader)).get, 10 seconds)
-//      Tracer.currentContext.name must be("renamed-trace")
-//      Some(result.header.headers(traceTokenHeaderName)) must be(expectedToken)
-//    }
-//
 //    "propagate the TraceContext and LocalStorage through of filters in the current request" in {
-//      route(FakeRequest(GET, "/retrieve").withHeaders(traceTokenHeader, traceLocalStorageHeader))
+//      route(app, FakeRequest(GET, "/retrieve").withHeaders(traceTokenHeader, traceLocalStorageHeader))
 //      TraceLocal.retrieve(TraceLocalKey).get must be(traceLocalStorageValue)
 //    }
 //
 //    "propagate metadata generated in the async filters" in {
-//      route(FakeRequest(GET, "/retrieve"))
+//      route(app, FakeRequest(GET, "/retrieve"))
 //      Tracer.currentContext mustBe 'closed
 //      inside(Tracer.currentContext) {
 //        case ctx: MetricsOnlyContext =>
@@ -134,31 +147,16 @@ class RequestHandlerInstrumentationSpec extends PlaySpec with OneServerPerSuite 
 //      }
 //    }
 //
-//    "response to the getRouted Action and normalise the current TraceContext name" in {
-//      Await.result(WS.url(s"http://localhost:$port/getRouted").get(), 10 seconds)
-//      Kamon.metrics.find("getRouted.get", "trace", Map("filter" -> "async")) must not be empty
-//    }
-//
-//    "response to the postRouted Action and normalise the current TraceContext name" in {
-//      Await.result(WS.url(s"http://localhost:$port/postRouted").post("content"), 10 seconds)
-//      Kamon.metrics.find("postRouted.post", "trace", Map("filter" -> "async")) must not be empty
-//    }
-//
-//    "response to the showRouted Action and normalise the current TraceContext name" in {
-//      Await.result(WS.url(s"http://localhost:$port/showRouted/2").get(), 10 seconds)
-//      Kamon.metrics.find("show.some.id.get", "trace", Map("filter" -> "async")) must not be empty
-//    }
-//
 //    "record http server metrics for all processed requests" in {
 //      val collectionContext = CollectionContext(100)
 //      Kamon.metrics.find("play-server", "http-server").get.collect(collectionContext)
 //
 //      for (repetition ← 1 to 10) {
-//        Await.result(route(FakeRequest(GET, "/default").withHeaders(traceTokenHeader)).get, 10 seconds)
+//        Await.result(route(app, FakeRequest(GET, "/default").withHeaders(traceTokenHeader)).get, 10 seconds)
 //      }
 //
 //      for (repetition ← 1 to 5) {
-//        Await.result(route(FakeRequest(GET, "/notFound").withHeaders(traceTokenHeader)).get, 10 seconds)
+//        Await.result(route(app, FakeRequest(GET, "/notFound").withHeaders(traceTokenHeader)).get, 10 seconds)
 //      }
 //
 //      for (repetition ← 1 to 5) {
@@ -176,9 +174,12 @@ class RequestHandlerInstrumentationSpec extends PlaySpec with OneServerPerSuite 
 //  }
 //
 //  def routeWithOnError[T](req: Request[T])(implicit w: Writeable[T]): Option[Future[Result]] = {
-//    route(req).map { result ⇒
+//    val errorHandler = new GuiceApplicationBuilder()
+//      .injector()
+//      .instanceOf[ErrorHandler]
+//    route(app, req).map { result ⇒
 //      result.recoverWith {
-//        case t: Throwable ⇒ DefaultGlobal.onError(req, t)
+//        case t: Throwable ⇒ errorHandler.onServerError(req, t)
 //      }
 //    }
 //  }
@@ -207,6 +208,22 @@ class RequestHandlerInstrumentationSpec extends PlaySpec with OneServerPerSuite 
 //  }
 //}
 //
+//@Singleton
+//class ErrorHandler extends HttpErrorHandler {
+//
+//  def onClientError(request: RequestHeader, statusCode: Int, message: String) = {
+//    Future.successful(
+//      new Results.Status(statusCode)("A client error occurred: " + message)
+//    )
+//  }
+//
+//  def onServerError(request: RequestHeader, exception: Throwable) = {
+//    Future.successful(
+//      InternalServerError("A server error occurred: " + exception.getMessage)
+//    )
+//  }
+//}
+//
 //class TraceAsyncFilter @Inject() extends EssentialFilter {
 //  override def apply(next: EssentialAction): EssentialAction = EssentialAction { requestHeader =>
 //    def onResult(result: Result): Result = {
@@ -219,11 +236,11 @@ class RequestHandlerInstrumentationSpec extends PlaySpec with OneServerPerSuite 
 //    nextAccumulator.map(onResult)
 //  }
 //}
-//
+
 //class TestHttpFilters @Inject() (traceLocalFilter: TraceLocalFilter, traceAsyncFilter: TraceAsyncFilter) extends HttpFilters {
 //  val filters = Seq(traceLocalFilter, traceAsyncFilter)
 //}
-//
+
 class Routes @Inject() (application: controllers.Application) extends GeneratedRouter with SimpleRouter {
   val prefix = "/"
 
@@ -235,25 +252,10 @@ class Routes @Inject() (application: controllers.Application) extends GeneratedR
   private[this] lazy val Application_getRouted =
     Route("GET", PathPattern(List(StaticPart(prefix), StaticPart(defaultPrefix), StaticPart("getRouted"))))
 
-  private[this] lazy val Application_show =
-    Route("GET", PathPattern(List(StaticPart(prefix), StaticPart(defaultPrefix), StaticPart("showRouted/"), DynamicPart("id", """[^/]+""", encodeable = true))))
-
-  //Posts
-  private[this] lazy val Application_postRouted =
-    Route("POST", PathPattern(List(StaticPart(prefix), StaticPart(defaultPrefix), StaticPart("postRouted"))))
-
   def routes: PartialFunction[RequestHeader, Handler] = {
     case Application_getRouted(params) ⇒ call {
       createInvoker(application.getRouted,
         HandlerDef(this.getClass.getClassLoader, "", "controllers.Application", "getRouted", Nil, "GET", """some comment""", prefix + """getRouted""")).call(application.getRouted)
-    }
-    case Application_postRouted(params) ⇒ call {
-      createInvoker(application.postRouted,
-        HandlerDef(this.getClass.getClassLoader, "", "controllers.Application", "postRouted", Nil, "POST", """some comment""", prefix + """postRouted""")).call(application.postRouted)
-    }
-    case Application_show(params) ⇒ call(params.fromPath[Int]("id", None)) { (id) ⇒
-      createInvoker(application.showRouted(id),
-        HandlerDef(this.getClass.getClassLoader, "", "controllers.Application", "showRouted", Seq(classOf[Int]), "GET", """""", prefix + """show/some/$id<[^/]+>""")).call(application.showRouted(id))
     }
   }
 
@@ -267,42 +269,36 @@ object controllers {
   import play.api.mvc._
 
   class Application extends Controller {
-    val postRouted = Action {
-      Ok("invoked postRouted")
-    }
     val getRouted = Action {
       Ok("invoked getRouted")
     }
-    def showRouted(id: Int) = Action {
-      Ok("invoked show with: " + id)
-    }
   }
 }
-//
-//class TestNameGenerator extends NameGenerator {
-//  import scala.collection.concurrent.TrieMap
-//  import play.api.routing.Router
-//  import java.util.Locale
-//  import kamon.util.TriemapAtomicGetOrElseUpdate.Syntax
-//
-//  private val cache = TrieMap.empty[String, String]
-//  private val normalizePattern = """\$([^<]+)<[^>]+>""".r
-//
-//  def generateOperationName(requestHeader: RequestHeader): String = requestHeader.tags.get(Router.Tags.RouteVerb).map { verb ⇒
-//    val path = requestHeader.tags(Router.Tags.RoutePattern)
-//    cache.atomicGetOrElseUpdate(s"$verb$path", {
-//      val traceName = {
-//        // Convert paths of form GET /foo/bar/$paramname<regexp>/blah to foo.bar.paramname.blah.get
-//        val p = normalizePattern.replaceAllIn(path, "$1").replace('/', '.').dropWhile(_ == '.')
-//        val normalisedPath = {
-//          if (p.lastOption.exists(_ != '.')) s"$p."
-//          else p
-//        }
-//        s"$normalisedPath${verb.toLowerCase(Locale.ENGLISH)}"
-//      }
-//      traceName
-//    })
-//  } getOrElse s"${requestHeader.method}: ${requestHeader.uri}"
-//
-//  def generateHttpClientOperationName(request: WSRequest): String = request.url
-//}
+
+class TestNameGenerator extends NameGenerator {
+  import java.util.Locale
+
+  import play.api.routing.Router
+
+  import scala.collection.concurrent.TrieMap
+
+  private val cache = TrieMap.empty[String, String]
+  private val normalizePattern = """\$([^<]+)<[^>]+>""".r
+
+  def generateOperationName(requestHeader: RequestHeader): String = requestHeader.attrs.get(Router.Attrs.HandlerDef).map { handlerDef ⇒
+    cache.getOrElseUpdate(s"${handlerDef.verb}${handlerDef.path}", {
+      val traceName = {
+        // Convert paths of form GET /foo/bar/$paramname<regexp>/blah to foo.bar.paramname.blah.get
+        val p = normalizePattern.replaceAllIn(handlerDef.path, "$1").replace('/', '.').dropWhile(_ == '.')
+        val normalisedPath = {
+          if (p.lastOption.exists(_ != '.')) s"$p."
+          else p
+        }
+        s"$normalisedPath${handlerDef.verb.toLowerCase(Locale.ENGLISH)}"
+      }
+      traceName
+    })
+  } getOrElse s"${requestHeader.method}: ${requestHeader.uri}"
+
+  def generateHttpClientOperationName(request: WSRequest): String = request.url
+}

@@ -17,7 +17,7 @@ package kamon.play.instrumentation
 
 import java.util
 
-import io.netty.handler.codec.http.{HttpRequest, HttpResponse}
+import akka.http.scaladsl.model.{HttpRequest, HttpResponse}
 import io.opentracing.propagation.Format.Builtin.HTTP_HEADERS
 import io.opentracing.propagation.TextMap
 import kamon.Kamon
@@ -25,7 +25,7 @@ import kamon.play.KamonFilter
 import kamon.util.{CallingThreadExecutionContext, HasContinuation}
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation._
-import play.api.mvc.EssentialFilter
+import play.api.mvc.{EssentialFilter, RequestHeader}
 
 import scala.concurrent.Future
 
@@ -37,8 +37,20 @@ class RequestHandlerInstrumentation {
   @DeclareMixin("play.api.mvc.RequestHeader+")
   def mixinHasContinuationToRequestHeader: HasContinuation = HasContinuation.fromTracerActiveSpan()
 
-  @Around("execution(* play.core.server.netty.PlayRequestHandler.handle(..)) && args(*, request)")
-  def onHandle(pjp: ProceedingJoinPoint, request: HttpRequest): Any = {
+//  @Around("execution(* play.api.http.DefaultHttpRequestHandler.routeRequest(..)) && args(requestHeader)")
+//  def routeRequest(pjp: ProceedingJoinPoint, requestHeader: RequestHeader): Any = {
+//    println("LA PUTA QUE TE PARIO")
+//    pjp.proceed()
+//  }
+
+  @Around("execution(* play.core.server.AkkaHttpServer.handleRequest(..))")
+  def route2RequestNumberTwo(pjp: ProceedingJoinPoint): Any = {
+    println("LA CONCHA DE TU MADRE")
+
+  }
+
+  @Around("execution(* play.core.server.AkkaHttpServer.handleRequest(..)) && args(request, *)")
+  def routeRequestNumberTwo(pjp: ProceedingJoinPoint, request: HttpRequest): Any = {
     val incomingSpanContext = Kamon.extract(HTTP_HEADERS, readOnlyTextMapFromHttpRequest(request))
     val span = Kamon.buildSpan("unknown-operation")
       .asChildOf(incomingSpanContext)
@@ -53,7 +65,7 @@ class RequestHandlerInstrumentation {
     responseFuture.transform(
       s = response => {
         val requestSpan = continuation.activate()
-        if(isError(response.getStatus.code())) {
+        if(isError(response.status.intValue())) {
           requestSpan.setTag("error", "true")
         }
 
@@ -71,9 +83,12 @@ class RequestHandlerInstrumentation {
   }
 
   def readOnlyTextMapFromHttpRequest(request: HttpRequest): TextMap = new TextMap {
+    import scala.collection.JavaConverters._
+
     override def put(key: String, value: String): Unit = {}
+
     override def iterator(): util.Iterator[util.Map.Entry[String, String]] =
-      request.headers().entries().iterator()
+      request.headers.map(header => header.name() -> header.value()).toMap.asJava.entrySet().iterator()
   }
 
   def isError(statusCode: Int): Boolean =

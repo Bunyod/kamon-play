@@ -1,4 +1,5 @@
-/* =========================================================================================
+/*
+ * =========================================================================================
  * Copyright © 2013-2017 the kamon project <http://kamon.io/>
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
@@ -13,18 +14,22 @@
  * =========================================================================================
  */
 
-package kamon.play.action
+package kamon.play
 
+import akka.util.ByteString
 import kamon.Kamon
-import play.api.mvc._
 
-import scala.concurrent.Future
+import play.api.libs.streams.Accumulator
+import play.api.mvc.{EssentialAction, EssentialFilter, RequestHeader, Result}
 
-case class OperationName[A](name: String)(action: Action[A]) extends Action[A] {
-  def apply(request: Request[A]): Future[Result] = {
-    Kamon.onActiveSpan(_.setOperationName(name))
-    action(request)
+class KamonFilter extends EssentialFilter {
+  override def apply(next: EssentialAction): EssentialAction = new EssentialAction {
+    override def apply(requestHeader: RequestHeader): Accumulator[ByteString, Result] = {
+      Kamon.onActiveSpan {
+        _.setOperationName(Play.generateOperationName(requestHeader))
+      }
+
+      next.apply(requestHeader)
+    }
   }
-
-  lazy val parser = action.parser
 }

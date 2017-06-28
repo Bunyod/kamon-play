@@ -13,18 +13,14 @@
  * =========================================================================================
  */
 
-package kamon.play.action
+package kamon.play.instrumentation
 
-import kamon.Kamon
-import play.api.mvc._
+import kamon.util.HasContinuation
+import org.aspectj.lang.annotation.{Aspect, DeclareMixin}
 
-import scala.concurrent.Future
+@Aspect
+class FakeRequestIntrumentation {
 
-case class OperationName[A](name: String)(action: Action[A]) extends Action[A] {
-  def apply(request: Request[A]): Future[Result] = {
-    Kamon.onActiveSpan(_.setOperationName(name))
-    action(request)
-  }
-
-  lazy val parser = action.parser
+  @DeclareMixin("play.api.test.FakeRequest")
+  def mixinContextAwareNewRequest: HasContinuation = HasContinuation.fromTracerActiveSpan()
 }

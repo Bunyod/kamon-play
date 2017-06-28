@@ -18,13 +18,14 @@ package kamon.play.action
 import kamon.Kamon
 import play.api.mvc._
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
-case class OperationName[A](name: String)(action: Action[A]) extends Action[A] {
+case class OperationName[A](name: String)(action: Action[A])(ec: ExecutionContext) extends Action[A] {
   def apply(request: Request[A]): Future[Result] = {
     Kamon.onActiveSpan(_.setOperationName(name))
     action(request)
   }
-
   lazy val parser = action.parser
+
+  override def executionContext: ExecutionContext = ec
 }

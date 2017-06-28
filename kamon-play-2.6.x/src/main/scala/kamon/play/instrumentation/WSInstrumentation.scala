@@ -14,7 +14,6 @@
  * =========================================================================================
  */
 
-
 package kamon.play.instrumentation
 
 import java.util
@@ -35,11 +34,13 @@ import scala.concurrent.Future
 @Aspect
 class WSInstrumentation {
 
-  @Pointcut("execution(* play.api.libs.ws.ning.NingWSRequest.execute()) && this(request)")
-  def onExecuteRequest(request: WSRequest): Unit = {}
+  @Pointcut("execution(* play.api.libs.ws.WSRequestExecutor+.execute(..)) && args(request)")
+  def onExecuteWSRequest(request: WSRequest): Unit = {}
 
-  @Around("onExecuteRequest(request)")
+  @Around("onExecuteWSRequest(request)")
   def aroundExecuteRequest(pjp: ProceedingJoinPoint, request: WSRequest): Any = {
+    println("EXECUTING A HTTP CLIENT " + Kamon.activeSpan())
+
     val activeSpan = Kamon.activeSpan()
     if(activeSpan == null)
       pjp.proceed()
@@ -50,7 +51,7 @@ class WSInstrumentation {
 
       val maybeHeaders = mutable.Map.empty[String, String]
       Kamon.inject(clientRequestSpan.context(), HTTP_HEADERS, writeOnlyTextMapFromMap(maybeHeaders))
-      val injectedRequest = request.withHeaders(maybeHeaders.toSeq: _*)
+      val injectedRequest = request.withHttpHeaders(maybeHeaders.toSeq: _*)
       val responseFuture = pjp.proceed(Array(injectedRequest)).asInstanceOf[Future[WSResponse]]
 
       responseFuture.transform(
