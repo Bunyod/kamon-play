@@ -39,7 +39,6 @@ class WSInstrumentation {
 
   @Around("onExecuteWSRequest(request)")
   def aroundExecuteRequest(pjp: ProceedingJoinPoint, request: WSRequest): Any = {
-
     val activeSpan = Kamon.activeSpan()
     if(activeSpan == null)
       pjp.proceed()

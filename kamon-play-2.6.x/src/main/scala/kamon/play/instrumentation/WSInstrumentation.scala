@@ -39,8 +39,6 @@ class WSInstrumentation {
 
   @Around("onExecuteWSRequest(request)")
   def aroundExecuteRequest(pjp: ProceedingJoinPoint, request: StandaloneWSRequest): Any = {
-    println("EXECUTING A HTTP CLIENT " + Kamon.activeSpan())
-
     val activeSpan = Kamon.activeSpan()
     if(activeSpan == null)
       pjp.proceed()

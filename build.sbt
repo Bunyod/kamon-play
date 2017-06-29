@@ -43,7 +43,7 @@ val resolutionRepos = Seq("typesafe repo" at "http://repo.typesafe.com/typesafe/
 
 lazy val kamonPlay = Project("kamon-play", file("."))
   .settings(noPublishing: _*)
-  .aggregate(kamonPlay25, kamonPlay26)
+  .aggregate(kamonPlay24, kamonPlay25, kamonPlay26)
 
 
 lazy val kamonPlay24 = Project("kamon-play-24", file("kamon-play-2.4.x"))

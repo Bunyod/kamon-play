@@ -40,7 +40,6 @@ class RequestHandlerInstrumentation {
 
   @Around("execution(* play.core.server.AkkaHttpServer.handleRequest(..)) && args(request, *)")
   def routeRequestNumberTwo(pjp: ProceedingJoinPoint, request: HttpRequest): Any = {
-    println("PUTOTOTOOTOTT" + request.headers)
     val incomingSpanContext = Kamon.extract(HTTP_HEADERS, readOnlyTextMapFromHttpRequest(request))
     val span = Kamon.buildSpan("unknown-operation")
       .asChildOf(incomingSpanContext)

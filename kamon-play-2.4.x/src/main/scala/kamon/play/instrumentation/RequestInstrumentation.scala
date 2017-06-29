@@ -26,6 +26,8 @@ import kamon.trace._
 import kamon.util.{CallingThreadExecutionContext, HasContinuation}
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation._
+import org.jboss.netty.channel.MessageEvent
+import org.jboss.netty.handler.codec.http.HttpRequest
 import play.api.mvc.Results._
 import play.api.mvc._
 
@@ -37,6 +39,17 @@ class RequestInstrumentation {
   @DeclareMixin("play.api.mvc.RequestHeader+")
   def mixinHasContinuationToRequestHeader: HasContinuation = HasContinuation.fromTracerActiveSpan()
 
+
+  @Around("execution(* play.core.server.netty.PlayDefaultUpstreamHandler.messageReceived(..)) && args(*, message)")
+  def onHandle(pjp: ProceedingJoinPoint, message: MessageEvent): Any = {
+    if(!message.getMessage.isInstanceOf[HttpRequest]) pjp.proceed()
+    else {
+      val request = message.getMessage.asInstanceOf[HttpRequest]
+
+    }
+
+
+  }
   @Before("call(* play.api.http.DefaultHttpRequestHandler.routeRequest(..)) && args(requestHeader)")
   def routeRequest(requestHeader: RequestHeader): Unit = {
     val token = if (PlayExtension.includeTraceToken) {
