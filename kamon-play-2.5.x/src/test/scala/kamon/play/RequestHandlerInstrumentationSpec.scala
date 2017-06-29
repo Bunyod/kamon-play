@@ -17,7 +17,10 @@ package kamon.play
 
 import javax.inject.Inject
 
+import akka.stream.Materializer
+import kamon.Kamon
 import kamon.play.action.OperationName
+import kamon.testkit.BaseKamonSpec
 import org.scalatest.Inside
 import org.scalatestplus.play._
 import org.scalatestplus.play.guice.GuiceOneServerPerSuite
@@ -34,7 +37,7 @@ import play.core.routing._
 
 import scala.concurrent.Future
 
-class RequestHandlerInstrumentationSpec extends PlaySpec with GuiceOneServerPerSuite with Inside {
+class RequestHandlerInstrumentationSpec extends PlaySpec with BaseKamonSpec with GuiceOneServerPerSuite with Inside {
   System.setProperty("config.file", "./kamon-play-2.5.x/src/test/resources/conf/application.conf")
 
   override lazy val port: Port = 19002
@@ -104,12 +107,13 @@ class RequestHandlerInstrumentationSpec extends PlaySpec with GuiceOneServerPerS
       val wsClient = app.injector.instanceOf[WSClient]
       val myPublicAddress =  s"localhost:$port"
 
-      val headers = wsClient.url(s"http://$myPublicAddress/async").withHeaders(traceTokenHeader, traceLocalStorageHeader)
-      val eventualResponse = headers.get()
-      val response = await(eventualResponse)
-
-      println(response.allHeaders)
-      response.header(traceTokenHeaderName) must be (expectedToken)
+      val testSpan = spanWithBaggage(key = "propagate", value = "ws-client")
+      val baggageInBody = Kamon.withSpan(testSpan) {
+        val response = await(wsClient.url(s"http://$myPublicAddress/async").withHeaders(traceTokenHeader, traceLocalStorageHeader).get())
+        response.header(traceTokenHeaderName) must be (expectedToken)
+        Future(Kamon.activeSpan().getBaggageItem("propagate"))
+      }
+      baggageInBody
     }
 
     "respond to the NotFound Action with X-Trace-Token" in {

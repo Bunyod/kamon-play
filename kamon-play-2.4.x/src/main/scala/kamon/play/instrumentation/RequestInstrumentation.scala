@@ -40,16 +40,16 @@ class RequestInstrumentation {
   def mixinHasContinuationToRequestHeader: HasContinuation = HasContinuation.fromTracerActiveSpan()
 
 
-  @Around("execution(* play.core.server.netty.PlayDefaultUpstreamHandler.messageReceived(..)) && args(*, message)")
-  def onHandle(pjp: ProceedingJoinPoint, message: MessageEvent): Any = {
-    if(!message.getMessage.isInstanceOf[HttpRequest]) pjp.proceed()
-    else {
-      val request = message.getMessage.asInstanceOf[HttpRequest]
+//  @Around("execution(* play.core.server.netty.PlayDefaultUpstreamHandler.messageReceived(..)) && args(*, message)")
+//  def onHandle(pjp: ProceedingJoinPoint, message: MessageEvent): Any = {
+//    if(!message.getMessage.isInstanceOf[HttpRequest]) pjp.proceed()
+//    else {
+//      val request = message.getMessage.asInstanceOf[HttpRequest]
+//
+//    }
 
-    }
 
-
-  }
+//  }
   @Before("call(* play.api.http.DefaultHttpRequestHandler.routeRequest(..)) && args(requestHeader)")
   def routeRequest(requestHeader: RequestHeader): Unit = {
     val token = if (PlayExtension.includeTraceToken) {

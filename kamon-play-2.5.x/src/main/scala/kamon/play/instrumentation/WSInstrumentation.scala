@@ -66,9 +66,8 @@ class WSInstrumentation {
   }
 
   def writeOnlyTextMapFromMap(map: scala.collection.mutable.Map[String, String]): TextMap = new TextMap {
-    override def put(key: String, value: String): Unit = {
+    override def put(key: String, value: String): Unit =
       map.put(key, value)
-    }
 
     override def iterator(): util.Iterator[util.Map.Entry[String, String]] =
       Collections.emptyIterator()

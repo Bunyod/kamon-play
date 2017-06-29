@@ -26,7 +26,7 @@ import kamon.play.Play
 import kamon.util.CallingThreadExecutionContext
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation.{Around, Aspect, Pointcut}
-import play.api.libs.ws.{StandaloneWSRequest, WSResponse}
+import play.api.libs.ws.StandaloneWSRequest
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -50,7 +50,7 @@ class WSInstrumentation {
       val maybeHeaders = mutable.Map.empty[String, String]
       Kamon.inject(clientRequestSpan.context(), HTTP_HEADERS, writeOnlyTextMapFromMap(maybeHeaders))
       val injectedRequest = request.withHttpHeaders(maybeHeaders.toSeq: _*)
-      val responseFuture = pjp.proceed(Array(injectedRequest)).asInstanceOf[Future[WSResponse]]
+      val responseFuture = pjp.proceed(Array(injectedRequest)).asInstanceOf[Future[play.api.libs.ws.StandaloneWSResponse]]
 
       responseFuture.transform(
         s = response => {
@@ -66,9 +66,8 @@ class WSInstrumentation {
   }
 
   def writeOnlyTextMapFromMap(map: scala.collection.mutable.Map[String, String]): TextMap = new TextMap {
-    override def put(key: String, value: String): Unit = {
+    override def put(key: String, value: String): Unit =
       map.put(key, value)
-    }
 
     override def iterator(): util.Iterator[util.Map.Entry[String, String]] =
       Collections.emptyIterator()
