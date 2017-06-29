@@ -93,26 +93,17 @@ class RequestInstrumentationSpec extends PlaySpec with BaseKamonSpec with GuiceO
     .routes(withRoutes)
     .build
 
-  val traceTokenValue = "kamon-trace-token-test"
-  val traceTokenHeaderName = "X-Trace-Token"
-  val expectedToken = Some(traceTokenValue)
-  val traceTokenHeader = traceTokenHeaderName -> traceTokenValue
-  val traceLocalStorageValue = "localStorageValue"
-  val traceLocalStorageKey = "localStorageKey"
-  val traceLocalStorageHeader = traceLocalStorageKey -> traceLocalStorageValue
-
   "the Request instrumentation" should {
-    "respond to the Async Action with X-Trace-Token" in {
+
+    "respond to the Async Action with ..." in {
       val wsClient = app.injector.instanceOf[WSClient]
       val myPublicAddress =  s"localhost:$port"
 
-      val testSpan = spanWithBaggage(key = "propagate", value = "ws-client")
-      val baggageInBody = Kamon.withSpan(testSpan) {
-        val response = await(wsClient.url(s"http://$myPublicAddress/async").withHeaders(traceTokenHeader, traceLocalStorageHeader).get())
-        Kamon.activeSpan().getBaggageItem("propagate")
+      Kamon.withSpan(spanWithBaggage(key = "propagate", value = "async")) {
+        val response = await(wsClient.url(s"http://$myPublicAddress/async").get())
+        response.status  must be(200)
+        Kamon.activeSpan().getBaggageItem("propagate") must be("async")
       }
-      println(baggageInBody)
-      println("PUUTUTUTUTUTUUTUTTUUTUTUTUTUTU")
     }
 
 //    "respond to the NotFound Action with X-Trace-Token" in {

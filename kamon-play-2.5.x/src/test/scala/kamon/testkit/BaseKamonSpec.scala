@@ -9,7 +9,7 @@ import scala.collection.concurrent.TrieMap
 trait BaseKamonSpec {
 
   def spanWithBaggage(operationName: String = "test", key: String, value: String): Span =
-    buildSpan("operationName").startManual().setBaggageItem(key, value)
+    buildSpan(operationName).startManual().setBaggageItem(key, value)
 
   implicit class MetricSyntax(metric: Metric[_]) {
     def valuesForTag(tag: String): Seq[String] = {
@@ -17,7 +17,7 @@ trait BaseKamonSpec {
       instrumentsField.setAccessible(true)
 
       val instruments = instrumentsField.get(metric).asInstanceOf[TrieMap[Map[String, String], _]]
-      val instrumentsWithTheTag = instruments.keys.filter(_.keys.find(_ == tag).nonEmpty)
+      val instrumentsWithTheTag = instruments.keys.filter(_.keys.exists(_ == tag))
       instrumentsWithTheTag.map(t => t(tag)).toSeq
     }
   }

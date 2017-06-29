@@ -22,7 +22,7 @@ import io.opentracing.propagation.Format.Builtin.HTTP_HEADERS
 import io.opentracing.propagation.TextMap
 import kamon.Kamon
 import kamon.play.KamonFilter
-import kamon.util.{CallingThreadExecutionContext, HasContinuation}
+import kamon.util.CallingThreadExecutionContext
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation._
 import play.api.mvc.EssentialFilter
@@ -33,9 +33,6 @@ import scala.concurrent.Future
 class RequestHandlerInstrumentation {
 
   private lazy val filter: EssentialFilter = new KamonFilter()
-
-  @DeclareMixin("play.api.mvc.RequestHeader+")
-  def mixinHasContinuationToRequestHeader: HasContinuation = HasContinuation.fromTracerActiveSpan()
 
   @Around("execution(* play.core.server.netty.PlayRequestHandler.handle(..)) && args(*, request)")
   def onHandle(pjp: ProceedingJoinPoint, request: HttpRequest): Any = {
