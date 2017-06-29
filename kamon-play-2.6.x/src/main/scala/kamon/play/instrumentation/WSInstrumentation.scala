@@ -26,7 +26,7 @@ import kamon.play.Play
 import kamon.util.CallingThreadExecutionContext
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation.{Around, Aspect, Pointcut}
-import play.api.libs.ws.{WSRequest, WSResponse}
+import play.api.libs.ws.{StandaloneWSRequest, WSResponse}
 
 import scala.collection.mutable
 import scala.concurrent.Future
@@ -34,11 +34,11 @@ import scala.concurrent.Future
 @Aspect
 class WSInstrumentation {
 
-  @Pointcut("execution(* play.api.libs.ws.WSRequestExecutor+.execute(..)) && args(request)")
-  def onExecuteWSRequest(request: WSRequest): Unit = {}
+  @Pointcut("execution(* play.api.libs.ws.WSRequestExecutor$$anon$2.apply(..)) && args(request)")
+  def onExecuteWSRequest(request: StandaloneWSRequest): Unit = {}
 
   @Around("onExecuteWSRequest(request)")
-  def aroundExecuteRequest(pjp: ProceedingJoinPoint, request: WSRequest): Any = {
+  def aroundExecuteRequest(pjp: ProceedingJoinPoint, request: StandaloneWSRequest): Any = {
     println("EXECUTING A HTTP CLIENT " + Kamon.activeSpan())
 
     val activeSpan = Kamon.activeSpan()

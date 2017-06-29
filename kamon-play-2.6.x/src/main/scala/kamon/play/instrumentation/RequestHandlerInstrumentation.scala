@@ -25,7 +25,7 @@ import kamon.play.KamonFilter
 import kamon.util.{CallingThreadExecutionContext, HasContinuation}
 import org.aspectj.lang.ProceedingJoinPoint
 import org.aspectj.lang.annotation._
-import play.api.mvc.{EssentialFilter, RequestHeader}
+import play.api.mvc.EssentialFilter
 
 import scala.concurrent.Future
 
@@ -37,20 +37,10 @@ class RequestHandlerInstrumentation {
   @DeclareMixin("play.api.mvc.RequestHeader+")
   def mixinHasContinuationToRequestHeader: HasContinuation = HasContinuation.fromTracerActiveSpan()
 
-//  @Around("execution(* play.api.http.DefaultHttpRequestHandler.routeRequest(..)) && args(requestHeader)")
-//  def routeRequest(pjp: ProceedingJoinPoint, requestHeader: RequestHeader): Any = {
-//    println("LA PUTA QUE TE PARIO")
-//    pjp.proceed()
-//  }
-
-  @Around("execution(* play.core.server.AkkaHttpServer.handleRequest(..))")
-  def route2RequestNumberTwo(pjp: ProceedingJoinPoint): Any = {
-    println("LA CONCHA DE TU MADRE")
-
-  }
 
   @Around("execution(* play.core.server.AkkaHttpServer.handleRequest(..)) && args(request, *)")
   def routeRequestNumberTwo(pjp: ProceedingJoinPoint, request: HttpRequest): Any = {
+    println("PUTOTOTOOTOTT" + request.headers)
     val incomingSpanContext = Kamon.extract(HTTP_HEADERS, readOnlyTextMapFromHttpRequest(request))
     val span = Kamon.buildSpan("unknown-operation")
       .asChildOf(incomingSpanContext)
@@ -60,7 +50,6 @@ class RequestHandlerInstrumentation {
 
     val responseFuture = pjp.proceed().asInstanceOf[Future[HttpResponse]]
     span.deactivate()
-
 
     responseFuture.transform(
       s = response => {

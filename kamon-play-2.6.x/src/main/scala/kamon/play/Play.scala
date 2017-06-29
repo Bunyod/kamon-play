@@ -17,19 +17,20 @@
 package kamon
 package play
 
-import _root_.play.api.libs.ws.WSRequest
+import _root_.play.api.libs.ws.StandaloneWSRequest
 import _root_.play.api.mvc.RequestHeader
 import com.typesafe.config.Config
 import kamon.util.DynamicAccess
 
 object Play {
+
   @volatile private var nameGenerator: NameGenerator = new DefaultNameGenerator()
   loadConfiguration(Kamon.config())
 
   def generateOperationName(requestHeader: RequestHeader): String =
     nameGenerator.generateOperationName(requestHeader)
 
-  def generateHttpClientOperationName(request: WSRequest): String =
+  def generateHttpClientOperationName(request: StandaloneWSRequest): String =
     nameGenerator.generateHttpClientOperationName(request)
 
   private def loadConfiguration(config: Config): Unit = {
@@ -46,7 +47,7 @@ object Play {
 
 trait NameGenerator {
   def generateOperationName(requestHeader: RequestHeader): String
-  def generateHttpClientOperationName(request: WSRequest): String
+  def generateHttpClientOperationName(request: StandaloneWSRequest): String
 }
 
 
@@ -73,5 +74,5 @@ class DefaultNameGenerator extends NameGenerator {
     })
   } getOrElse "UntaggedTrace"
 
-  def generateHttpClientOperationName(request: WSRequest): String = request.uri.getAuthority
+  def generateHttpClientOperationName(request: StandaloneWSRequest): String = request.uri.getAuthority
 }

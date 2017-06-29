@@ -13,8 +13,8 @@
  * =========================================================================================
  */
 
-val play24Version     = "2.4.8"
-val play25Version     = "2.5.4"
+val play24Version     = "2.4.11"
+val play25Version     = "2.5.15"
 val play26Version     = "2.6.0"
 
 val kamonCore         = "io.kamon"                  %%  "kamon-core"            % "1.0.0-RC1-1d0548cb8281202738d8d48cbe9cdd62cf209e21"
@@ -29,7 +29,7 @@ val typesafeConfig    = "com.typesafe"              %   "config"                
 //play 2.5.x
 val play25            = "com.typesafe.play"         %%  "play"                  % play25Version
 val playWS25          = "com.typesafe.play"         %%  "play-ws"               % play25Version
-val playTest25        = "org.scalatestplus.play"    %%  "scalatestplus-play"    % "1.5.0"
+val playTest25        = "org.scalatestplus.play"    %%  "scalatestplus-play"    % "2.0.0"
 
 //play 2.6.x
 val play26            = "com.typesafe.play"         %%  "play"                  % play26Version
@@ -43,7 +43,7 @@ val resolutionRepos = Seq("typesafe repo" at "http://repo.typesafe.com/typesafe/
 
 lazy val kamonPlay = Project("kamon-play", file("."))
   .settings(noPublishing: _*)
-  .aggregate(kamonPlay26)
+  .aggregate(kamonPlay25, kamonPlay26)
 
 
 lazy val kamonPlay24 = Project("kamon-play-24", file("kamon-play-2.4.x"))

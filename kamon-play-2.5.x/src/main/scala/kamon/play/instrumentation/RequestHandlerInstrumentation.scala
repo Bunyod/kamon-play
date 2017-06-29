@@ -49,7 +49,6 @@ class RequestHandlerInstrumentation {
     val responseFuture = pjp.proceed().asInstanceOf[Future[HttpResponse]]
     span.deactivate()
 
-
     responseFuture.transform(
       s = response => {
         val requestSpan = continuation.activate()

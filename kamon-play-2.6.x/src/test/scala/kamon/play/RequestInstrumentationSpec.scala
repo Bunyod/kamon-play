@@ -24,7 +24,7 @@ import org.scalatestplus.play.guice.GuiceOneServerPerSuite
 import play.api.Application
 import play.api.http.HttpErrorHandler
 import play.api.inject.guice.GuiceApplicationBuilder
-import play.api.libs.ws.WSRequest
+import play.api.libs.ws.{WSClient, WSRequest, WSResponse}
 import play.api.mvc.Results.{InternalServerError, Ok}
 import play.api.mvc.{Action, Handler, _}
 import play.api.routing.{HandlerDef, SimpleRouter}
@@ -33,17 +33,14 @@ import play.api.test._
 import play.core.routing._
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 class RequestInstrumentationSpec extends PlaySpec with GuiceOneServerPerSuite with Inside {
   System.setProperty("config.file", "./kamon-play-2.6.x/src/test/resources/conf/application.conf")
 
   override lazy val port: Port = 19002
-  val executor = scala.concurrent.ExecutionContext.Implicits.global
+  val executor: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
 
-  val kamonFilter = new GuiceApplicationBuilder()
-    .injector()
-    .instanceOf[KamonFilter]
 
   val withRoutes: PartialFunction[(String, String), Handler] = {
     case ("GET", "/async") ⇒
@@ -82,16 +79,15 @@ class RequestInstrumentationSpec extends PlaySpec with GuiceOneServerPerSuite wi
       }
   }
 
-//    ("play.http.requestHandler", "play.api.http.DefaultHttpRequestHandler"),
-//    ("play.http.filters", "kamon.play.TestHttpFilters"),
-  val additionalConfiguration: Map[String, _] = Map(
-    ("application.router", "kamon.play.Routes"),
+  val additionalConfiguration : Map[String, _] = Map(
+    ("play.http.filters", "kamon.play.TestHttpFilters"),
+    ("play.http.requestHandler", "play.api.http.DefaultHttpRequestHandler"),
     ("logger.root", "OFF"),
     ("logger.play", "OFF"),
     ("logger.application", "OFF"))
 
-  implicit override lazy val app: Application = new GuiceApplicationBuilder()
-    .configure(additionalConfiguration)
+  override def fakeApplication():Application = new GuiceApplicationBuilder()
+//    .configure(additionalConfiguration)
     .routes(withRoutes)
     .build
 
@@ -105,8 +101,14 @@ class RequestInstrumentationSpec extends PlaySpec with GuiceOneServerPerSuite wi
 
   "the Request instrumentation" should {
     "respond to the Async Action with X-Trace-Token" in {
-      val Some(result) = route(app, FakeRequest(GET, "/async").withHeaders(traceTokenHeader, traceLocalStorageHeader))
-      header(traceTokenHeaderName, result) must be(expectedToken)
+      val wsClient = app.injector.instanceOf[WSClient]
+      val myPublicAddress =  s"localhost:$port"
+
+      val headers = wsClient.url(s"http://$myPublicAddress/async").withHttpHeaders(traceTokenHeader, traceLocalStorageHeader)
+      val eventualResponse = headers.get()
+      val response = await(eventualResponse)
+
+      response.header(traceTokenHeaderName) must be (expectedToken)
     }
 
     "respond to the NotFound Action with X-Trace-Token" in {
